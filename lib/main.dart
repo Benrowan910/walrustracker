@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+Future<void> main() async {
+  await dotenv.load(fileName: '.env');
+
   runApp(const WalrusTracker());
 }
 
@@ -51,8 +54,8 @@ class _GameListScreenState extends State<GameListScreen> {
   final List<Game> games = [];
   final List<Game> filteredGames = [];
   final TextEditingController searchController = TextEditingController();
-  final String clientId = '1efwnc3tso9etae2mohqr8hkjixsnw';
-  final String accessToken = '49ab4e1gom54daz4xmfk0ejyuhs0d4';
+  final String clientId = dotenv.get('API_CLIENT', fallback: 'API_CLIENT not found');
+  final String accessToken = dotenv.get('API_KEY', fallback: 'API_KEY not found');
 
   @override
   void initState(){
