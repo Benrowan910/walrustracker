@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'GameDetailScreen.dart';
+
 Future<void> main() async {
   await dotenv.load(fileName: '.env');
 
@@ -42,7 +44,10 @@ class WalrusTracker extends StatelessWidget {
 class Game{
   final String title;
   bool isPlayed;
-  Game({required this.title, this.isPlayed = false});
+  String note;
+  String? coverUrl;
+
+  Game({required this.title, this.isPlayed = false, this.note = '', this.coverUrl});
 }
 
 class GameListScreen extends StatefulWidget{
@@ -65,24 +70,38 @@ class _GameListScreenState extends State<GameListScreen> {
   }
 
   Future<void> fetchGames() async {
-    final response = await http.post(
-      Uri.parse('https://api.igdb.com/v4/games'), headers: {
-          'Client-ID': clientId, 'Authorization': 'Bearer $accessToken', 
-        },
+    int offset = 0;
+    const int limit = 500;
+    bool hasMoreGames = true;
 
-        body: 'fields name; limit 20;'
-    );
+    while(hasMoreGames){
+      final response = await http.post(
+          Uri.parse('https://api.igdb.com/v4/games'), headers: {
+            'Client-ID': clientId, 'Authorization': 'Bearer $accessToken', 
+          },
 
-    if (response.statusCode == 200){
-      final List<dynamic> data = json.decode(response.body);
-      setState((){
-        games.addAll(data.map((game) => Game(title:game['name'])).toList());
-        filteredGames.addAll(games);
-      });
-    }
-      else{
-        print('Failed to fetch games: $response.statusCode}');
+          body: 'fields name, cover.image_id; limit $limit; offset $offset;'
+      );   
+      if (response.statusCode == 200){
+        final List<dynamic> data = json.decode(response.body);
+        setState((){
+          games.addAll(data.map((game) => Game(title:game['name'], coverUrl: game['cover'] != null ? 'https://images.igdb.com/igdb/image/upload/t_cover_big/${game['cover']['image_id']}.jpg' : null,)).toList());
+          filteredGames.addAll(games);
+        });
+
+        if (data.length < limit){
+          hasMoreGames = false;
+        } else{
+          offset += limit;
+        }
+
+        await Future.delayed(Duration(seconds: 2));
       }
+        else{
+          print('Failed to fetch games: ${response.statusCode}');
+          hasMoreGames = false;
+        }
+      }       
     }
 
     void toggleGameStatus(int index){
@@ -122,21 +141,71 @@ class _GameListScreenState extends State<GameListScreen> {
             ),
           ),
         ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: filteredGames.length, 
-            itemBuilder: (context, index){
-              return ListTile(
-                title:Text(filteredGames[index].title),
-                trailing: Icon(
-                  filteredGames[index].isPlayed ? Icons.check_box : Icons.check_box_outline_blank, 
-                  color: filteredGames[index].isPlayed ? Colors.green : null,
+Expanded(
+  child: GridView.builder(
+    padding: EdgeInsets.all(8.0),
+    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 10, // Number of columns
+      crossAxisSpacing: 8.0, // Space between columns
+      mainAxisSpacing: 8.0, // Space between rows
+      childAspectRatio: 0.7, // Aspect ratio for each card
+    ),
+    itemCount: filteredGames.length,
+    itemBuilder: (context, index) {
+      return GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => GameDetailScreen(game: filteredGames[index]),
+            ),
+          ).then((_) {
+            setState(() {}); // Refresh the UI on return
+          });
+        },
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Display Game Cover
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(8.0)),
+                  child: filteredGames[index].coverUrl != null
+                      ? Image.network(
+                          filteredGames[index].coverUrl!,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Icon(Icons.broken_image, size: 50),
+                        )
+                      : Icon(Icons.videogame_asset, size: 50),
                 ),
-                onTap: () => toggleGameStatus(index),
-              );
-            },
+              ),
+              SizedBox(height: 8.0),
+              // Display Game Title
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text(
+                  filteredGames[index].title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+              SizedBox(height: 8.0),
+            ],
           ),
         ),
+      );
+    },
+  ),
+),
       ],
     ),
   );
